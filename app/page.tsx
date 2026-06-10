@@ -6,22 +6,6 @@ type Target = { platform: string; status: string; remoteUrl: string | null; erro
 type Post = { id: string; prompt: string; caption: string; status: string; createdAt: string; scheduledAt?: string | null; imageUrl: string | null; videoUrl?: string | null; targets?: Target[] };
 type Account = { id: string; platform: string; displayName: string | null; externalId: string | null; tokenExpiresAt: string | null; createdAt: string };
 
-const PROVIDERS = [
-  { id: "meta", label: "Instagram + Facebook", icon: "📘" },
-  { id: "linkedin", label: "LinkedIn", icon: "💼" },
-  { id: "tiktok", label: "TikTok", icon: "🎵" },
-  { id: "google", label: "YouTube", icon: "▶️" },
-  { id: "x", label: "X (Twitter)", icon: "𝕏" },
-  { id: "threads", label: "Threads", icon: "🧵" },
-  { id: "pinterest", label: "Pinterest", icon: "📌" },
-  { id: "reddit", label: "Reddit", icon: "👽" },
-  { id: "gbp", label: "Google Business", icon: "🏪" },
-];
-type CredProvider = { provider: string; fields: { name: string; label: string; type: string; placeholder?: string }[] };
-const CRED_LABELS: Record<string, { label: string; icon: string }> = {
-  bluesky: { label: "Bluesky", icon: "🦋" },
-  mastodon: { label: "Mastodon", icon: "🐘" },
-};
 const ICONS: Record<string, string> = {
   instagram: "📸", facebook: "📘", linkedin: "💼", tiktok: "🎵", youtube: "▶️",
   x: "𝕏", threads: "🧵", pinterest: "📌", reddit: "👽", gbp: "🏪", bluesky: "🦋", mastodon: "🐘",
@@ -77,7 +61,6 @@ function Studio({ onLogout }: { onLogout: () => void }) {
   const [tone, setTone] = useState("");
   const [generating, setGenerating] = useState(false);
   const [msg, setMsg] = useState("");
-  const [banner, setBanner] = useState("");
   const [draft, setDraft] = useState<Post | null>(null);
   const [captionEdit, setCaptionEdit] = useState("");
   const [savingCaption, setSavingCaption] = useState(false);
@@ -88,50 +71,13 @@ function Studio({ onLogout }: { onLogout: () => void }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [credProviders, setCredProviders] = useState<CredProvider[]>([]);
-  const [credOpen, setCredOpen] = useState<string | null>(null);
-  const [credValues, setCredValues] = useState<Record<string, string>>({});
-  const [credBusy, setCredBusy] = useState(false);
 
   const loadPosts = () => fetch("/api/social/posts").then((r) => (r.ok ? r.json() : [])).then((d) => setPosts(Array.isArray(d) ? d : [])).catch(() => {});
   const loadAccounts = () => fetch("/api/social/accounts").then((r) => (r.ok ? r.json() : [])).then((d) => setAccounts(Array.isArray(d) ? d : [])).catch(() => {});
-  const loadCredProviders = () => fetch("/api/social/connect-credentials").then((r) => (r.ok ? r.json() : [])).then((d) => setCredProviders(Array.isArray(d) ? d : [])).catch(() => {});
-
-  async function connectCredentials(provider: string) {
-    setCredBusy(true);
-    setBanner("");
-    try {
-      const res = await fetch("/api/social/connect-credentials", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, values: credValues }),
-      });
-      const data = await res.json();
-      if (!res.ok) setBanner(`⚠️ Connection issue: ${data?.error || "failed"}`);
-      else {
-        setBanner(`✅ Connected ${provider}.`);
-        setCredOpen(null);
-        setCredValues({});
-        loadAccounts();
-      }
-    } catch {
-      setBanner("⚠️ Network error.");
-    } finally {
-      setCredBusy(false);
-    }
-  }
 
   useEffect(() => {
     loadPosts();
     loadAccounts();
-    loadCredProviders();
-    const params = new URLSearchParams(window.location.search);
-    const connected = params.get("connected");
-    const err = params.get("social_error");
-    if (connected || err) {
-      setBanner(connected ? `✅ Connected ${connected}.` : `⚠️ Connection issue: ${err}`);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
   }, []);
 
   async function generate(e: FormEvent) {
@@ -240,14 +186,6 @@ function Studio({ onLogout }: { onLogout: () => void }) {
     }
   }
 
-  async function disconnect(id: string) {
-    const res = await fetch(`/api/social/accounts/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      setSelected((c) => c.filter((x) => x !== id));
-      loadAccounts();
-    }
-  }
-
   async function remove(id: string) {
     setDeletingId(id);
     try {
@@ -281,66 +219,11 @@ function Studio({ onLogout }: { onLogout: () => void }) {
         </div>
       </header>
 
-      {banner && (
-        <div className="panel" style={{ marginBottom: 20, padding: "12px 16px", borderColor: banner.startsWith("✅") ? "var(--accent-2)" : "var(--danger)" }}>{banner}</div>
-      )}
-
-      {/* Connections */}
-      <div className="panel" style={{ marginBottom: 20 }}>
-        <div style={{ fontWeight: 800, marginBottom: 6 }}>🔗 Connections</div>
-        <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 0, marginBottom: 14 }}>Connect each platform once. Tokens are stored encrypted.</p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-          {PROVIDERS.map((p) => (
-            <a key={p.id} className="btn btn-ghost" href={`/api/social/connect/${p.id}`} style={{ textDecoration: "none" }}>{p.icon} Connect {p.label}</a>
-          ))}
-          {credProviders.map((p) => {
-            const meta = CRED_LABELS[p.provider] || { label: p.provider, icon: "📣" };
-            return (
-              <button key={p.provider} className="btn btn-ghost" onClick={() => { setCredOpen(credOpen === p.provider ? null : p.provider); setCredValues({}); }}>
-                {meta.icon} Connect {meta.label}
-              </button>
-            );
-          })}
+      {accounts.length === 0 && (
+        <div className="panel" style={{ marginBottom: 20, padding: "12px 16px" }}>
+          No channels connected yet — head to <a href="/settings" style={{ color: "var(--accent-2)", fontWeight: 700 }}>⚙️ Settings → Connections</a> to connect your accounts.
         </div>
-        {credOpen && (() => {
-          const p = credProviders.find((c) => c.provider === credOpen);
-          if (!p) return null;
-          const meta = CRED_LABELS[p.provider] || { label: p.provider, icon: "📣" };
-          return (
-            <div style={{ display: "grid", gap: 8, padding: 12, marginBottom: 16, borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel-2)" }}>
-              <div style={{ fontWeight: 700, fontSize: 13 }}>{meta.icon} Connect {meta.label}</div>
-              {p.fields.map((f) => (
-                <input
-                  key={f.name}
-                  className="input"
-                  type={f.type === "password" ? "password" : "text"}
-                  placeholder={f.placeholder || f.label}
-                  value={credValues[f.name] || ""}
-                  onChange={(e) => setCredValues((v) => ({ ...v, [f.name]: e.target.value }))}
-                />
-              ))}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-primary" disabled={credBusy} onClick={() => connectCredentials(p.provider)}>{credBusy ? "Connecting…" : "Connect"}</button>
-                <button className="btn btn-ghost" onClick={() => { setCredOpen(null); setCredValues({}); }}>Cancel</button>
-              </div>
-            </div>
-          );
-        })()}
-        {accounts.length > 0 && (
-          <div style={{ display: "grid", gap: 8 }}>
-            {accounts.map((a) => (
-              <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel-2)" }}>
-                <span style={{ fontSize: 18 }}>{ICONS[a.platform] || "📣"}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, textTransform: "capitalize" }}>{a.platform}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{a.displayName || a.externalId}</div>
-                </div>
-                <button className="btn btn-ghost" style={{ color: "var(--danger)", padding: "6px 12px" }} onClick={() => disconnect(a.id)}>Disconnect</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "start" }}>
         {/* Compose */}

@@ -17,7 +17,7 @@ export async function GET(request: Request, { params }: RouteContext) {
   const provider = PROVIDERS[platform]!;
   const base = (process.env.APP_BASE_URL || new URL(request.url).origin).replace(/\/$/, "");
   if (!provider.isConfigured()) {
-    return NextResponse.redirect(`${base}/?social_error=${platform}_not_configured`);
+    return NextResponse.redirect(`${base}/settings?social_error=${platform}_not_configured`);
   }
 
   const state = createState({ provider: platform, uid: "operator" });

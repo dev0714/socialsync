@@ -21,7 +21,7 @@ export async function GET(request: Request, { params }: RouteContext) {
   const { platform } = await params;
   const url = new URL(request.url);
   const base = (process.env.APP_BASE_URL || url.origin).replace(/\/$/, "");
-  const back = (suffix: string) => NextResponse.redirect(`${base}/?${suffix}`);
+  const back = (suffix: string) => NextResponse.redirect(`${base}/settings?${suffix}`);
 
   const error = url.searchParams.get("error");
   if (error) return back(`social_error=${encodeURIComponent(error)}`);
