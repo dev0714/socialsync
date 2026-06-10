@@ -1,10 +1,33 @@
 // Shared types for the Social Studio publishing layer.
 
-export type SocialPlatform = "instagram" | "facebook" | "tiktok" | "youtube" | "linkedin";
+export type SocialPlatform =
+  | "instagram"
+  | "facebook"
+  | "tiktok"
+  | "youtube"
+  | "linkedin"
+  | "x"
+  | "threads"
+  | "pinterest"
+  | "reddit"
+  | "bluesky"
+  | "mastodon"
+  | "gbp";
 
 // OAuth "providers" — one consent flow can yield accounts on multiple platforms
 // (Meta's login returns both Facebook Pages and their linked Instagram accounts).
-export type SocialProvider = "meta" | "linkedin" | "tiktok" | "google";
+export type SocialProvider =
+  | "meta"
+  | "linkedin"
+  | "tiktok"
+  | "google"
+  | "x"
+  | "threads"
+  | "pinterest"
+  | "reddit"
+  | "bluesky"
+  | "mastodon"
+  | "gbp";
 
 export const SOCIAL_PLATFORMS: SocialPlatform[] = [
   "instagram",
@@ -12,6 +35,13 @@ export const SOCIAL_PLATFORMS: SocialPlatform[] = [
   "linkedin",
   "tiktok",
   "youtube",
+  "x",
+  "threads",
+  "pinterest",
+  "reddit",
+  "bluesky",
+  "mastodon",
+  "gbp",
 ];
 
 export const PLATFORM_LABELS: Record<SocialPlatform, string> = {
@@ -20,6 +50,13 @@ export const PLATFORM_LABELS: Record<SocialPlatform, string> = {
   tiktok: "TikTok",
   youtube: "YouTube",
   linkedin: "LinkedIn",
+  x: "X (Twitter)",
+  threads: "Threads",
+  pinterest: "Pinterest",
+  reddit: "Reddit",
+  bluesky: "Bluesky",
+  mastodon: "Mastodon",
+  gbp: "Google Business",
 };
 
 export const PROVIDER_LABELS: Record<SocialProvider, string> = {
@@ -27,6 +64,13 @@ export const PROVIDER_LABELS: Record<SocialProvider, string> = {
   linkedin: "LinkedIn",
   tiktok: "TikTok",
   google: "YouTube (Google)",
+  x: "X (Twitter)",
+  threads: "Threads",
+  pinterest: "Pinterest",
+  reddit: "Reddit",
+  bluesky: "Bluesky",
+  mastodon: "Mastodon",
+  gbp: "Google Business Profile",
 };
 
 // Which platforms each provider's connect flow can produce.
@@ -35,6 +79,13 @@ export const PROVIDER_PLATFORMS: Record<SocialProvider, SocialPlatform[]> = {
   linkedin: ["linkedin"],
   tiktok: ["tiktok"],
   google: ["youtube"],
+  x: ["x"],
+  threads: ["threads"],
+  pinterest: ["pinterest"],
+  reddit: ["reddit"],
+  bluesky: ["bluesky"],
+  mastodon: ["mastodon"],
+  gbp: ["gbp"],
 };
 
 export type ConnectedTokens = {
@@ -44,11 +95,16 @@ export type ConnectedTokens = {
   scopes?: string | null;
 };
 
+// Free-form per-platform data that isn't a token (e.g. Pinterest board id,
+// Mastodon/Bluesky instance URL, Reddit handle).
+export type AccountMeta = Record<string, unknown>;
+
 // A channel discovered during the OAuth exchange, ready to persist.
 export type DiscoveredAccount = ConnectedTokens & {
   platform: SocialPlatform;
   displayName: string;
   externalId: string;
+  meta?: AccountMeta | null;
 };
 
 // A persisted account with decrypted tokens, used at publish time.
@@ -61,6 +117,7 @@ export type SocialAccountRecord = {
   refreshToken: string | null;
   tokenExpiresAt: string | null;
   scopes: string | null;
+  meta: AccountMeta | null;
 };
 
 export type MediaType = "image" | "video";
@@ -89,8 +146,27 @@ export type PublishResult = {
 export type OAuthProvider = {
   provider: SocialProvider;
   isConfigured(): boolean;
-  connectUrl(state: string, redirectUri: string): string;
-  exchangeCode(code: string, redirectUri: string): Promise<DiscoveredAccount[]>;
+  // PKCE providers (e.g. X) receive a code_challenge to embed in the authorize URL
+  // and the matching code_verifier back at exchange time.
+  usesPkce?: boolean;
+  connectUrl(state: string, redirectUri: string, codeChallenge?: string): string;
+  exchangeCode(code: string, redirectUri: string, codeVerifier?: string): Promise<DiscoveredAccount[]>;
+};
+
+// Some networks have no OAuth redirect flow — they connect with credentials entered
+// by the operator (Bluesky app password; Mastodon instance + access token).
+export type CredentialField = {
+  name: string;
+  label: string;
+  type: "text" | "password";
+  placeholder?: string;
+};
+
+export type CredentialProvider = {
+  provider: SocialProvider;
+  fields: CredentialField[];
+  isConfigured(): boolean;
+  connect(values: Record<string, string>): Promise<DiscoveredAccount[]>;
 };
 
 export type Publisher = {

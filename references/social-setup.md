@@ -25,7 +25,9 @@ YOUTUBE_PRIVACY=private          # set public once happy
 
 The **OAuth redirect URI** for each provider is:
 `${APP_BASE_URL}/api/social/callback/<provider>` where `<provider>` is `meta`, `linkedin`,
-`tiktok`, or `google`. Register exactly these in each developer console.
+`tiktok`, `google`, `x`, `threads`, `pinterest`, `reddit`, or `gbp`. Register exactly these in
+each developer console. `bluesky` and `mastodon` use no redirect — they connect in-app with
+credentials (see below).
 
 ---
 
@@ -61,12 +63,63 @@ The **OAuth redirect URI** for each provider is:
 5. Quota: each upload costs ~1600 units of the default 10,000/day. Image posts are rendered
    to a short MP4 (ffmpeg) before upload; uploads default to `private`.
 
+## X / Twitter (`x`)
+1. Create a project + app at developer.twitter.com with **OAuth 2.0** enabled (User authentication
+   settings → type **Web App**, **PKCE** is used automatically).
+2. Redirect URI: `${APP_BASE_URL}/api/social/callback/x`. Scopes: `tweet.read tweet.write
+   users.read offline.access`.
+3. Set `X_CLIENT_ID` / `X_CLIENT_SECRET`. Note: write access to the API is a **paid tier**.
+   Image upload uses the v1.1 media endpoint; text-only tweets always work.
+
+## Threads (`threads`)
+1. Create a Threads app at developers.facebook.com (separate "Use cases → Threads API" config).
+2. Redirect URI: `${APP_BASE_URL}/api/social/callback/threads`. Scopes: `threads_basic`,
+   `threads_content_publish`.
+3. Set `THREADS_APP_ID` / `THREADS_APP_SECRET`.
+
+## Pinterest (`pinterest`)
+1. Create an app at developers.pinterest.com; request standard access (trial works for your own
+   account).
+2. Redirect URI: `${APP_BASE_URL}/api/social/callback/pinterest`. Scopes:
+   `boards:read,pins:read,pins:write,user_accounts:read`.
+3. Set `PINTEREST_APP_ID` / `PINTEREST_APP_SECRET`. Pins are created on your **first board**, so
+   create at least one board before publishing.
+
+## Reddit (`reddit`)
+1. Create a **web app** at reddit.com/prefs/apps.
+2. Redirect URI: `${APP_BASE_URL}/api/social/callback/reddit`. Scopes: `identity submit`.
+3. Set `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` / `REDDIT_USER_AGENT` (Reddit requires a
+   descriptive User-Agent). Posts go to your **profile** (`u_<name>`) by default; image posts are
+   submitted as link posts.
+
+## Google Business Profile (`gbp`)
+1. Reuses the **same Google OAuth client** as YouTube — just also register the redirect URI
+   `${APP_BASE_URL}/api/social/callback/gbp` and add the scope `.../auth/business.manage`.
+2. Enable the **Business Profile APIs** (Account Management, Business Information, and the v4
+   `mybusiness` posts API) in Google Cloud; this access requires Google approval.
+3. Posts go to your account's **first location** as a local post.
+
+## Bluesky (`bluesky`) — no app needed
+Connect in-app: enter your **handle** + an **app password** (Bluesky → Settings → App Passwords).
+The app password is stored encrypted and used to mint a session for each post. Service URL
+defaults to `https://bsky.social`.
+
+## Mastodon (`mastodon`) — no app needed
+Connect in-app: enter your **instance URL** + a **personal access token** (your instance →
+Preferences → Development → New application, with `write:statuses` and `write:media`).
+
 ---
 
 ## How publishing maps to media
-- **Image posts** publish directly to Instagram, Facebook, and LinkedIn.
-- **TikTok** uses photo mode (pulls the image URL).
-- **YouTube** is video-only — the generated image is turned into a short MP4 automatically.
+- **Image posts** publish directly to Instagram, Facebook, LinkedIn, X, Threads, Pinterest,
+  Reddit, Google Business, Bluesky, and Mastodon.
+- **TikTok** uses photo mode (pulls the image URL); video uploads pull the video URL.
+- **YouTube** is video-only — an uploaded video is used directly, otherwise the generated image
+  is turned into a short MP4 automatically.
+- **Video uploads** currently publish to YouTube, TikTok, and Facebook; the other networks
+  return a clear "video not yet supported" message (use an image or text).
+- **Pinterest** requires an image. **X / Threads / Reddit / Bluesky / Mastodon** also accept
+  text-only posts.
 
 ## Verifying
 1. Set `ANTHROPIC_API_KEY` + `IMAGE_API_KEY` + `SOCIAL_TOKEN_SECRET`, deploy, open `/admin` → Social Studio.

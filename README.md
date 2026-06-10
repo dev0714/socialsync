@@ -2,15 +2,16 @@
 
 AI-assisted social media publishing. Describe a post in plain language → Claude writes the
 caption and an image is generated → review, edit, and publish to **Instagram, Facebook,
-LinkedIn, TikTok and YouTube** from one place.
+LinkedIn, TikTok, YouTube, X, Threads, Pinterest, Reddit, Google Business, Bluesky and
+Mastodon** from one place.
 
 Standalone Next.js 16 app, backed by Supabase (the `socialsync` schema + a storage bucket).
 
 ## Features
 - **AI compose** — Claude (`claude-opus-4-8`) captions + AI image generation.
 - **Upload your own** — use a photo or video instead of (or alongside) the AI image.
-- **Direct platform APIs** — no third-party aggregator. OAuth per platform, tokens stored
-  AES-256-GCM-encrypted.
+- **Direct platform APIs** — no third-party aggregator. OAuth (or app-password) per platform,
+  tokens stored AES-256-GCM-encrypted.
 - **Multi-platform publish** — fan-out with per-channel results and live links.
 - **Scheduling** — queue a post for a future time; a Vercel Cron publishes it when due.
 - **Async status** — TikTok/YouTube uploads finish asynchronously; a poller cron updates the

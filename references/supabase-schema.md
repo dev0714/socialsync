@@ -13,10 +13,13 @@ alter default privileges in schema socialsync grant all on sequences to anon, au
 -- Connected channels; access_token / refresh_token are AES-256-GCM encrypted by the app.
 create table socialsync.social_accounts (
   id uuid primary key default gen_random_uuid(),
-  platform text not null check (platform in ('instagram','facebook','tiktok','youtube','linkedin')),
+  platform text not null check (platform in (
+    'instagram','facebook','tiktok','youtube','linkedin',
+    'x','threads','pinterest','reddit','bluesky','mastodon','gbp')),
   display_name text,
   external_id text,
   access_token text, refresh_token text, token_expires_at timestamptz, scopes text,
+  meta jsonb,                          -- per-platform data (Pinterest board, Mastodon/Bluesky instance, …)
   connected_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -40,7 +43,9 @@ create table socialsync.social_post_targets (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references socialsync.social_posts(id) on delete cascade,
   account_id uuid,                     -- the account that published this target (for polling/retry)
-  platform text not null check (platform in ('instagram','facebook','tiktok','youtube','linkedin')),
+  platform text not null check (platform in (
+    'instagram','facebook','tiktok','youtube','linkedin',
+    'x','threads','pinterest','reddit','bluesky','mastodon','gbp')),
   -- 'processing' = the platform accepted the upload but is still finalizing it (TikTok/YouTube)
   status text not null default 'pending' check (status in ('pending','processing','published','failed','skipped')),
   remote_id text, remote_url text, error text, posted_at timestamptz,

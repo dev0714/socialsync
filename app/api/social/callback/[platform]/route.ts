@@ -6,6 +6,16 @@ import { verifyState } from "@/lib/social/oauth-state";
 
 type RouteContext = { params: Promise<{ platform: string }> };
 
+function readCookie(request: Request, name: string): string | null {
+  const header = request.headers.get("cookie");
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === name) return decodeURIComponent(v.join("="));
+  }
+  return null;
+}
+
 export async function GET(request: Request, { params }: RouteContext) {
   const { platform } = await params;
   const url = new URL(request.url);
@@ -23,8 +33,12 @@ export async function GET(request: Request, { params }: RouteContext) {
   if (!code) return back("social_error=missing_code");
 
   try {
-    const provider = PROVIDERS[platform];
-    const discovered = await provider.exchangeCode(code, getRedirectUri(platform));
+    const provider = PROVIDERS[platform]!;
+    // PKCE providers read the verifier from the cookie set during connect.
+    const codeVerifier = provider.usesPkce
+      ? url.searchParams.get("__pkce") || readCookie(request, `pkce_${platform}`)
+      : undefined;
+    const discovered = await provider.exchangeCode(code, getRedirectUri(platform), codeVerifier ?? undefined);
     if (discovered.length === 0) return back("social_error=no_accounts");
 
     const supabase = getSupabaseAdminClient();
@@ -36,6 +50,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       refresh_token: acct.refreshToken ? encryptToken(acct.refreshToken) : null,
       token_expires_at: acct.expiresAt ?? null,
       scopes: acct.scopes ?? null,
+      meta: acct.meta ?? null,
       updated_at: new Date().toISOString(),
     }));
 
@@ -45,7 +60,9 @@ export async function GET(request: Request, { params }: RouteContext) {
       .upsert(rows, { onConflict: "platform,external_id" });
 
     if (upsertError) return back(`social_error=${encodeURIComponent(upsertError.message)}`);
-    return back(`connected=${platform}`);
+    const res = back(`connected=${platform}`);
+    res.cookies.delete(`pkce_${platform}`);
+    return res;
   } catch (e) {
     const message = e instanceof Error ? e.message : "connection_failed";
     return back(`social_error=${encodeURIComponent(message.slice(0, 120))}`);

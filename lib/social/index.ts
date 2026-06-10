@@ -4,7 +4,15 @@ import { metaProvider, facebookPublisher, instagramPublisher } from "./meta";
 import { linkedinProvider, linkedinPublisher } from "./linkedin";
 import { tiktokProvider, tiktokPublisher } from "./tiktok";
 import { googleProvider, youtubePublisher } from "./youtube";
+import { xProvider, xPublisher } from "./x";
+import { threadsProvider, threadsPublisher } from "./threads";
+import { pinterestProvider, pinterestPublisher } from "./pinterest";
+import { redditProvider, redditPublisher } from "./reddit";
+import { gbpProvider, gbpPublisher } from "./gbp";
+import { blueskyProvider, blueskyPublisher } from "./bluesky";
+import { mastodonProvider, mastodonPublisher } from "./mastodon";
 import type {
+  CredentialProvider,
   OAuthProvider,
   Publisher,
   SocialAccountRecord,
@@ -12,11 +20,23 @@ import type {
   SocialProvider,
 } from "./types";
 
-export const PROVIDERS: Record<SocialProvider, OAuthProvider> = {
+// Providers that connect via an OAuth redirect.
+export const PROVIDERS: Partial<Record<SocialProvider, OAuthProvider>> = {
   meta: metaProvider,
   linkedin: linkedinProvider,
   tiktok: tiktokProvider,
   google: googleProvider,
+  x: xProvider,
+  threads: threadsProvider,
+  pinterest: pinterestProvider,
+  reddit: redditProvider,
+  gbp: gbpProvider,
+};
+
+// Providers that connect with operator-entered credentials (no OAuth redirect).
+export const CREDENTIAL_PROVIDERS: Partial<Record<SocialProvider, CredentialProvider>> = {
+  bluesky: blueskyProvider,
+  mastodon: mastodonProvider,
 };
 
 export const PUBLISHERS: Record<SocialPlatform, Publisher> = {
@@ -25,10 +45,21 @@ export const PUBLISHERS: Record<SocialPlatform, Publisher> = {
   linkedin: linkedinPublisher,
   tiktok: tiktokPublisher,
   youtube: youtubePublisher,
+  x: xPublisher,
+  threads: threadsPublisher,
+  pinterest: pinterestPublisher,
+  reddit: redditPublisher,
+  gbp: gbpPublisher,
+  bluesky: blueskyPublisher,
+  mastodon: mastodonPublisher,
 };
 
 export function isProvider(value: string): value is SocialProvider {
   return value in PROVIDERS;
+}
+
+export function isCredentialProvider(value: string): value is SocialProvider {
+  return value in CREDENTIAL_PROVIDERS;
 }
 
 // Where each provider's OAuth callback lands.
@@ -46,6 +77,7 @@ type AccountRow = {
   refresh_token: string | null;
   token_expires_at: string | null;
   scopes: string | null;
+  meta: Record<string, unknown> | null;
 };
 
 function toRecord(row: AccountRow): SocialAccountRecord {
@@ -58,6 +90,7 @@ function toRecord(row: AccountRow): SocialAccountRecord {
     refreshToken: row.refresh_token ? decryptToken(row.refresh_token) : null,
     tokenExpiresAt: row.token_expires_at,
     scopes: row.scopes,
+    meta: row.meta,
   };
 }
 
@@ -67,7 +100,7 @@ export async function loadAccountsByIds(ids: string[]): Promise<SocialAccountRec
   const { data } = await supabase
     .schema("socialsync")
     .from("social_accounts")
-    .select("id, platform, display_name, external_id, access_token, refresh_token, token_expires_at, scopes")
+    .select("id, platform, display_name, external_id, access_token, refresh_token, token_expires_at, scopes, meta")
     .in("id", ids);
   return (data ?? []).map((r) => toRecord(r as AccountRow));
 }
