@@ -72,113 +72,6 @@ export default function Home() {
   return <Studio onLogout={() => setAuthed(false)} />;
 }
 
-type Setting = {
-  key: string; label: string; group: string; secret: boolean;
-  placeholder: string; help: string; value: string; configured?: boolean; fromEnv: boolean;
-};
-
-function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const [fields, setFields] = useState<Setting[]>([]);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  const load = () => {
-    setLoading(true);
-    fetch("/api/settings")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((d: Setting[]) => {
-        const list = Array.isArray(d) ? d : [];
-        setFields(list);
-        const init: Record<string, string> = {};
-        for (const f of list) init[f.key] = f.secret ? "" : f.value || "";
-        setValues(init);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
-  useEffect(load, []);
-
-  async function save() {
-    setSaving(true);
-    setMsg("");
-    // Send non-secret values always; secrets only when the operator typed something.
-    const payload: Record<string, string> = {};
-    for (const f of fields) {
-      const v = values[f.key] ?? "";
-      if (f.secret) { if (v.trim() !== "") payload[f.key] = v; }
-      else payload[f.key] = v;
-    }
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: payload }),
-      });
-      setMsg(res.ok ? "✅ Settings saved." : "Could not save settings.");
-      if (res.ok) load();
-    } catch {
-      setMsg("Network error.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const groups = Array.from(new Set(fields.map((f) => f.group)));
-
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "grid", placeItems: "start center", padding: "40px 16px", overflowY: "auto", zIndex: 50 }}>
-      <div onClick={(e) => e.stopPropagation()} className="panel" style={{ width: "min(720px, 100%)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>⚙️ Settings</div>
-          <button className="btn btn-ghost" onClick={onClose}>Close</button>
-        </div>
-        <p style={{ color: "var(--text-dim)", fontSize: 13, marginTop: 0 }}>
-          API keys and per-platform credentials. Secrets are stored encrypted. Supabase keys, the
-          login password and token secret stay in the environment.
-        </p>
-
-        {loading ? (
-          <div style={{ color: "var(--text-dim)", padding: 20 }}>Loading…</div>
-        ) : (
-          <div style={{ display: "grid", gap: 18 }}>
-            {groups.map((group) => (
-              <div key={group}>
-                <div className="tag" style={{ marginBottom: 8 }}>{group}</div>
-                <div style={{ display: "grid", gap: 10 }}>
-                  {fields.filter((f) => f.group === group).map((f) => (
-                    <div key={f.key}>
-                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-                        {f.label}
-                        {f.secret && f.configured && <span style={{ fontSize: 11, color: "var(--accent-2)", fontWeight: 700 }}>configured ✓</span>}
-                        {f.fromEnv && <span style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 700 }}>from env</span>}
-                      </label>
-                      <input
-                        className="input"
-                        type={f.secret ? "password" : "text"}
-                        placeholder={f.secret && f.configured ? "•••••••• (leave blank to keep)" : f.placeholder}
-                        value={values[f.key] ?? ""}
-                        onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                      />
-                      {f.help && <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 3 }}>{f.help}</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 20 }}>
-          <button className="btn btn-primary" onClick={save} disabled={saving || loading}>{saving ? "Saving…" : "Save settings"}</button>
-          {msg && <span style={{ fontSize: 13, color: msg.startsWith("✅") ? "var(--accent-2)" : "var(--danger)" }}>{msg}</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Studio({ onLogout }: { onLogout: () => void }) {
   const [prompt, setPrompt] = useState("");
   const [tone, setTone] = useState("");
@@ -199,7 +92,6 @@ function Studio({ onLogout }: { onLogout: () => void }) {
   const [credOpen, setCredOpen] = useState<string | null>(null);
   const [credValues, setCredValues] = useState<Record<string, string>>({});
   const [credBusy, setCredBusy] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
 
   const loadPosts = () => fetch("/api/social/posts").then((r) => (r.ok ? r.json() : [])).then((d) => setPosts(Array.isArray(d) ? d : [])).catch(() => {});
   const loadAccounts = () => fetch("/api/social/accounts").then((r) => (r.ok ? r.json() : [])).then((d) => setAccounts(Array.isArray(d) ? d : [])).catch(() => {});
@@ -384,12 +276,10 @@ function Studio({ onLogout }: { onLogout: () => void }) {
           <div style={{ color: "var(--text-dim)", fontSize: 14 }}>Describe a post → AI caption + image → publish everywhere.</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn btn-ghost" onClick={() => setShowSettings(true)}>⚙️ Settings</button>
+          <a className="btn btn-ghost" href="/settings" style={{ textDecoration: "none" }}>⚙️ Settings</a>
           <button className="btn btn-ghost" onClick={logout}>Sign out</button>
         </div>
       </header>
-
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
       {banner && (
         <div className="panel" style={{ marginBottom: 20, padding: "12px 16px", borderColor: banner.startsWith("✅") ? "var(--accent-2)" : "var(--danger)" }}>{banner}</div>
