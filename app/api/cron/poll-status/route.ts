@@ -3,10 +3,12 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 import { PUBLISHERS, ensureFreshToken, loadAccountsByIds } from "@/lib/social";
 import { recomputePostStatus } from "@/lib/social/publish";
 import { isCronAuthorized } from "@/lib/cron";
+import { hydrateEnv } from "@/lib/settings";
 
 // Polls async platform uploads (TikTok publish_id, YouTube processing) for their final
 // state and updates the target rows. Wired to a Vercel Cron (see vercel.json).
 export async function GET(request: Request) {
+  await hydrateEnv(); // load CRON_SECRET (and platform creds) from stored settings
   if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

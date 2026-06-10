@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { PROVIDERS, getRedirectUri, isProvider } from "@/lib/social";
 import { createState } from "@/lib/social/oauth-state";
+import { hydrateEnv } from "@/lib/settings";
 
 type RouteContext = { params: Promise<{ platform: string }> };
 
 export async function GET(request: Request, { params }: RouteContext) {
   if (!(await isAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  await hydrateEnv();
 
   const { platform } = await params;
   if (!isProvider(platform)) return NextResponse.json({ error: "Unknown provider." }, { status: 400 });

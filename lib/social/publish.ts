@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient, getSupabaseBucketName } from "@/lib/supabase";
+import { hydrateEnv } from "@/lib/settings";
 import { PUBLISHERS, ensureFreshToken, loadAccountsByIds } from "./index";
 import type { MediaType, PublishPost } from "./types";
 
@@ -81,6 +82,7 @@ export async function publishPostToAccounts(
   postId: string,
   accountIds: string[],
 ): Promise<PublishOutcome> {
+  await hydrateEnv(); // apply DB-stored platform credentials/defaults
   const supabase = getSupabaseAdminClient();
 
   const { data: post, error: postError } = await supabase

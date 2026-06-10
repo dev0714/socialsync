@@ -3,6 +3,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase";
 import { encryptToken } from "@/lib/social/crypto";
 import { PROVIDERS, getRedirectUri, isProvider } from "@/lib/social";
 import { verifyState } from "@/lib/social/oauth-state";
+import { hydrateEnv } from "@/lib/settings";
 
 type RouteContext = { params: Promise<{ platform: string }> };
 
@@ -31,6 +32,8 @@ export async function GET(request: Request, { params }: RouteContext) {
 
   const code = url.searchParams.get("code");
   if (!code) return back("social_error=missing_code");
+
+  await hydrateEnv();
 
   try {
     const provider = PROVIDERS[platform]!;

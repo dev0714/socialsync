@@ -17,6 +17,8 @@ Standalone Next.js 16 app, backed by Supabase (the `socialsync` schema + a stora
 - **Async status** — TikTok/YouTube uploads finish asynchronously; a poller cron updates the
   final status + live link.
 - Image-only posts are auto-rendered to a short MP4 for YouTube (ffmpeg).
+- **In-app Settings** — AI keys and every platform's credentials are configured from a ⚙️ Settings
+  page (stored in the DB, secrets encrypted); only bootstrap secrets stay in the environment.
 - Single-operator password login.
 
 ## Quick start
@@ -29,10 +31,14 @@ npm run dev
 ## Setup
 1. **Supabase** — run the SQL in `references/supabase-schema.md`, expose the `socialsync`
    schema, and create a public `socialsync` storage bucket.
-2. **Env** — set `SUPABASE_*`, `SOCIALSYNC_PASSWORD`, `SOCIALSYNC_SESSION_SECRET`,
-   `ANTHROPIC_API_KEY`, `IMAGE_API_KEY`, `SOCIAL_TOKEN_SECRET`, and `APP_BASE_URL`.
-3. **Platforms** — register a developer app per platform and set its OAuth credentials.
-   Full per-platform steps, scopes, and redirect URIs are in `references/social-setup.md`.
+2. **Env (bootstrap only)** — set `SUPABASE_*`, `SOCIALSYNC_PASSWORD`,
+   `SOCIALSYNC_SESSION_SECRET`, and `SOCIAL_TOKEN_SECRET`. These must be in the environment;
+   everything else can be configured in-app.
+3. **Settings page** — sign in, open **⚙️ Settings**, and enter your AI keys, `APP_BASE_URL`,
+   `CRON_SECRET`, and each platform's OAuth credentials. They're saved to the database (secrets
+   encrypted) and take precedence over any env values.
+4. **Platforms** — register a developer app per platform; full per-platform steps, scopes, and
+   redirect URIs are in `references/social-setup.md`. Paste the credentials into Settings.
 4. **Scheduling (optional)** — set `CRON_SECRET`; `vercel.json` runs `/api/cron/publish`
    (publishes due scheduled posts) and `/api/cron/poll-status` (finalizes async TikTok/YouTube
    uploads) every 5 minutes on Vercel.

@@ -5,6 +5,7 @@ import { isAuthed } from "@/lib/auth";
 import { getSupabaseAdminClient, getSupabaseBucketName } from "@/lib/supabase";
 import { generateCaption } from "@/lib/ai/caption";
 import { generateImage } from "@/lib/ai/image";
+import { hydrateEnv } from "@/lib/settings";
 
 const bodySchema = z.object({
   prompt: z.string().min(3).max(2000),
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
   if (!(await isAuthed())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  await hydrateEnv();
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

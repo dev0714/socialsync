@@ -54,10 +54,20 @@ create table socialsync.social_post_targets (
 create index social_post_targets_post_idx on socialsync.social_post_targets (post_id);
 create index social_post_targets_status_idx on socialsync.social_post_targets (status) where status = 'processing';
 
+-- In-app configuration (AI keys, per-platform OAuth credentials, defaults). Secret values are
+-- AES-256-GCM encrypted by the app. Edited from the ⚙️ Settings page.
+create table socialsync.app_settings (
+  key text primary key,
+  value text,
+  is_secret boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
 -- Recommended: enable RLS with no policies (the app uses the service-role key, which bypasses RLS).
 alter table socialsync.social_accounts enable row level security;
 alter table socialsync.social_posts enable row level security;
 alter table socialsync.social_post_targets enable row level security;
+alter table socialsync.app_settings enable row level security;
 ```
 
 Then add `socialsync` to the project's exposed schemas (Dashboard → API settings), and create a
