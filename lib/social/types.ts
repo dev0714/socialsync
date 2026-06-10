@@ -63,16 +63,27 @@ export type SocialAccountRecord = {
   scopes: string | null;
 };
 
+export type MediaType = "image" | "video";
+
 export type PublishPost = {
   caption: string;
+  mediaType: MediaType;
   imageUrl: string | null; // public URL (Supabase storage)
-  // Lazily fetches the raw image bytes (used by video platforms).
+  videoUrl: string | null; // public URL (Supabase storage), when the media is a video
+  // Lazily fetches the raw media bytes (image, used by video platforms that render
+  // a still to MP4; or the uploaded video itself).
   imageBytes: () => Promise<Buffer>;
+  videoBytes: () => Promise<Buffer>;
 };
+
+// "processing" means the platform accepted the upload but is still finalizing it
+// asynchronously (e.g. TikTok publish_id, YouTube processing) — poll checkStatus later.
+export type PublishStatus = "published" | "processing";
 
 export type PublishResult = {
   remoteId: string | null;
   remoteUrl: string | null;
+  status?: PublishStatus; // defaults to "published" when omitted
 };
 
 export type OAuthProvider = {
@@ -86,6 +97,9 @@ export type Publisher = {
   // Refreshes an expired token if possible; returns null if refresh isn't supported.
   refresh?(account: SocialAccountRecord): Promise<ConnectedTokens | null>;
   publish(post: PublishPost, account: SocialAccountRecord): Promise<PublishResult>;
+  // For platforms that finish asynchronously: given the remoteId returned by publish(),
+  // report the final state. Returns status "processing" while still pending.
+  checkStatus?(remoteId: string, account: SocialAccountRecord): Promise<PublishResult>;
 };
 
 // Small helper: fetch JSON and throw a useful error on non-2xx.

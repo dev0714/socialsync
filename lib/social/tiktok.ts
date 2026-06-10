@@ -93,10 +93,17 @@ export const tiktokPublisher = {
   },
 
   async publish(post: PublishPost, account: SocialAccountRecord): Promise<PublishResult> {
-    if (!post.imageUrl) {
-      throw new Error("TikTok posts require an image (photo mode).");
-    }
     const privacy = process.env.TIKTOK_PRIVACY || "SELF_ONLY";
+    const isVideo = post.mediaType === "video";
+    const mediaUrl = isVideo ? post.videoUrl : post.imageUrl;
+    if (!mediaUrl) {
+      throw new Error("TikTok posts require an image or video.");
+    }
+
+    const sourceInfo = isVideo
+      ? { source: "PULL_FROM_URL", video_url: mediaUrl }
+      : { source: "PULL_FROM_URL", photo_cover_index: 0, photo_images: [mediaUrl] };
+
     const res = await fetchJson("https://open.tiktokapis.com/v2/post/publish/content/init/", {
       method: "POST",
       headers: {
@@ -109,15 +116,35 @@ export const tiktokPublisher = {
           description: post.caption,
           privacy_level: privacy,
         },
-        source_info: {
-          source: "PULL_FROM_URL",
-          photo_cover_index: 0,
-          photo_images: [post.imageUrl],
-        },
+        source_info: sourceInfo,
         post_mode: "DIRECT_POST",
-        media_type: "PHOTO",
+        media_type: isVideo ? "VIDEO" : "PHOTO",
       }),
     });
-    return { remoteId: res?.data?.publish_id ?? null, remoteUrl: null };
+    // TikTok finalizes the post asynchronously; track the publish_id and poll later.
+    return { remoteId: res?.data?.publish_id ?? null, remoteUrl: null, status: "processing" };
+  },
+
+  async checkStatus(remoteId: string, account: SocialAccountRecord): Promise<PublishResult> {
+    const res = await fetchJson("https://open.tiktokapis.com/v2/post/publish/status/fetch/", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${account.accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({ publish_id: remoteId }),
+    });
+    const status = res?.data?.status as string | undefined;
+    const postId = res?.data?.publicaly_available_post_id?.[0];
+    const remoteUrl = postId ? `https://www.tiktok.com/@${account.externalId}/video/${postId}` : null;
+
+    if (status === "PUBLISH_COMPLETE") {
+      return { remoteId, remoteUrl, status: "published" };
+    }
+    if (status === "FAILED") {
+      const reason = res?.data?.fail_reason || "TikTok publishing failed.";
+      throw new Error(reason);
+    }
+    return { remoteId, remoteUrl: null, status: "processing" };
   },
 };

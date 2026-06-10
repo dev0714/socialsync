@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 
 type Target = { platform: string; status: string; remoteUrl: string | null; error: string | null };
-type Post = { id: string; prompt: string; caption: string; status: string; createdAt: string; imageUrl: string | null; targets?: Target[] };
+type Post = { id: string; prompt: string; caption: string; status: string; createdAt: string; scheduledAt?: string | null; imageUrl: string | null; videoUrl?: string | null; targets?: Target[] };
 type Account = { id: string; platform: string; displayName: string | null; externalId: string | null; tokenExpiresAt: string | null; createdAt: string };
 
 const PROVIDERS = [
@@ -69,6 +69,8 @@ function Studio({ onLogout }: { onLogout: () => void }) {
   const [captionEdit, setCaptionEdit] = useState("");
   const [savingCaption, setSavingCaption] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState("");
   const [posts, setPosts] = useState<Post[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -116,6 +118,30 @@ function Studio({ onLogout }: { onLogout: () => void }) {
     }
   }
 
+  async function uploadMedia(file: File) {
+    setUploading(true);
+    setMsg("");
+    setDraft(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      if (prompt.trim()) body.append("prompt", prompt.trim());
+      const res = await fetch("/api/social/upload", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) setMsg(data?.error || "Upload failed.");
+      else {
+        setDraft(data.post);
+        setCaptionEdit(data.post.caption || "");
+        setMsg("✅ Media uploaded. Add a caption below.");
+        loadPosts();
+      }
+    } catch {
+      setMsg("Network error.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function saveCaption() {
     if (!draft) return;
     setSavingCaption(true);
@@ -134,20 +160,34 @@ function Studio({ onLogout }: { onLogout: () => void }) {
 
   async function publish() {
     if (!draft || selected.length === 0) return;
+    const scheduledAt = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
+    if (scheduledAt && new Date(scheduledAt).getTime() <= Date.now()) {
+      setMsg("Pick a time in the future to schedule.");
+      return;
+    }
     setPublishing(true);
     setMsg("");
     try {
       const res = await fetch(`/api/social/posts/${draft.id}/publish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountIds: selected }),
+        body: JSON.stringify({ accountIds: selected, scheduledAt }),
       });
       const data = await res.json();
       if (!res.ok) setMsg(data?.error || "Publish failed.");
-      else {
+      else if (data.scheduled) {
+        setMsg(`🗓️ Scheduled for ${new Date(data.scheduledAt).toLocaleString()}.`);
+        setScheduleAt("");
+        loadPosts();
+      } else {
         const ok = (data.targets || []).filter((t: Target) => t.status === "published").length;
+        const processing = (data.targets || []).filter((t: Target) => t.status === "processing").length;
         const failed = (data.targets || []).filter((t: Target) => t.status === "failed");
-        setMsg(failed.length ? `Published to ${ok}. Failed: ${failed.map((t: Target) => `${t.platform} (${t.error})`).join("; ")}` : `✅ Published to ${ok} channel${ok === 1 ? "" : "s"}.`);
+        const parts: string[] = [];
+        if (ok) parts.push(`published to ${ok}`);
+        if (processing) parts.push(`${processing} processing`);
+        if (failed.length) parts.push(`failed: ${failed.map((t: Target) => `${t.platform} (${t.error})`).join("; ")}`);
+        setMsg((failed.length ? "" : "✅ ") + (parts.join(" · ") || "Done."));
         loadPosts();
       }
     } catch {
@@ -232,8 +272,25 @@ function Studio({ onLogout }: { onLogout: () => void }) {
           <textarea className="textarea" rows={5} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. Weekend special: buy-one-get-one on all lattes, photo of a cozy coffee setup." style={{ resize: "vertical" }} />
           <div className="tag" style={{ margin: "14px 0 6px" }}>Tone (optional)</div>
           <input className="input" value={tone} onChange={(e) => setTone(e.target.value)} placeholder="warm and playful, urgent, professional…" />
-          <button className="btn btn-primary" style={{ marginTop: 16 }} type="submit" disabled={generating || !prompt.trim()}>{generating ? "Generating…" : "✨ Generate post"}</button>
-          {msg && <div style={{ marginTop: 14, fontSize: 13, color: msg.startsWith("✅") ? "var(--accent-2)" : "var(--danger)" }}>{msg}</div>}
+          <button className="btn btn-primary" style={{ marginTop: 16 }} type="submit" disabled={generating || uploading || !prompt.trim()}>{generating ? "Generating…" : "✨ Generate post"}</button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0 6px", color: "var(--text-dim)", fontSize: 12 }}>
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+            or upload your own
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          </div>
+          <label className="btn btn-ghost" style={{ cursor: uploading ? "default" : "pointer" }}>
+            {uploading ? "Uploading…" : "📎 Upload photo or video"}
+            <input
+              type="file"
+              accept="image/*,video/*"
+              hidden
+              disabled={uploading}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadMedia(f); e.target.value = ""; }}
+            />
+          </label>
+
+          {msg && <div style={{ marginTop: 14, fontSize: 13, color: msg.startsWith("✅") || msg.startsWith("🗓️") ? "var(--accent-2)" : "var(--danger)" }}>{msg}</div>}
         </form>
 
         {/* Preview */}
@@ -242,7 +299,11 @@ function Studio({ onLogout }: { onLogout: () => void }) {
           {!draft && <p style={{ color: "var(--text-dim)", fontSize: 13 }}>Your generated post will appear here.</p>}
           {draft && (
             <div>
-              {draft.imageUrl && <img src={draft.imageUrl} alt="" style={{ width: "100%", borderRadius: 12, marginBottom: 14, border: "1px solid var(--border)" }} />}
+              {draft.videoUrl ? (
+                <video src={draft.videoUrl} controls style={{ width: "100%", borderRadius: 12, marginBottom: 14, border: "1px solid var(--border)" }} />
+              ) : draft.imageUrl ? (
+                <img src={draft.imageUrl} alt="" style={{ width: "100%", borderRadius: 12, marginBottom: 14, border: "1px solid var(--border)" }} />
+              ) : null}
               <div className="tag" style={{ marginBottom: 6 }}>Caption</div>
               <textarea className="textarea" rows={7} value={captionEdit} onChange={(e) => setCaptionEdit(e.target.value)} style={{ resize: "vertical" }} />
               <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
@@ -267,7 +328,14 @@ function Studio({ onLogout }: { onLogout: () => void }) {
                     })}
                   </div>
                 )}
-                <button className="btn btn-accent" onClick={publish} disabled={publishing || selected.length === 0}>{publishing ? "Publishing…" : `🚀 Publish to ${selected.length || "…"} channel${selected.length === 1 ? "" : "s"}`}</button>
+                {accounts.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div className="tag" style={{ marginBottom: 6 }}>Schedule (optional)</div>
+                    <input className="input" type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} style={{ colorScheme: "dark" }} />
+                    {scheduleAt && <button className="btn btn-ghost" style={{ marginLeft: 8, padding: "6px 12px" }} onClick={() => setScheduleAt("")}>Clear</button>}
+                  </div>
+                )}
+                <button className="btn btn-accent" onClick={publish} disabled={publishing || selected.length === 0}>{publishing ? (scheduleAt ? "Scheduling…" : "Publishing…") : scheduleAt ? `🗓️ Schedule for ${selected.length || "…"} channel${selected.length === 1 ? "" : "s"}` : `🚀 Publish to ${selected.length || "…"} channel${selected.length === 1 ? "" : "s"}`}</button>
               </div>
             </div>
           )}
@@ -281,9 +349,13 @@ function Studio({ onLogout }: { onLogout: () => void }) {
         <div style={{ display: "grid", gap: 14 }}>
           {posts.map((post) => (
             <div key={post.id} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: 12, borderRadius: 12, border: "1px solid var(--border)", background: "var(--panel-2)" }}>
-              {post.imageUrl && <img src={post.imageUrl} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 9, flexShrink: 0 }} />}
+              {post.videoUrl ? (
+                <video src={post.videoUrl} muted style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 9, flexShrink: 0 }} />
+              ) : post.imageUrl ? (
+                <img src={post.imageUrl} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 9, flexShrink: 0 }} />
+              ) : null}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="tag" style={{ marginBottom: 4 }}>{post.status} · {new Date(post.createdAt).toLocaleString()}</div>
+                <div className="tag" style={{ marginBottom: 4 }}>{post.status}{post.status === "scheduled" && post.scheduledAt ? ` · ${new Date(post.scheduledAt).toLocaleString()}` : ` · ${new Date(post.createdAt).toLocaleString()}`}</div>
                 <div style={{ fontSize: 13, whiteSpace: "pre-wrap", maxHeight: 80, overflow: "hidden" }}>{post.caption}</div>
                 {post.targets && post.targets.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>

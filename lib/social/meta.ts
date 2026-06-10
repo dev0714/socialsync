@@ -104,6 +104,19 @@ export const metaProvider: OAuthProvider = {
 export const facebookPublisher = {
   async publish(post: PublishPost, account: SocialAccountRecord): Promise<PublishResult> {
     const pageId = account.externalId;
+    if (post.mediaType === "video" && post.videoUrl) {
+      const res = await fetchJson(`${GRAPH}/${pageId}/videos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_url: post.videoUrl,
+          description: post.caption,
+          access_token: account.accessToken,
+        }),
+      });
+      const id = res.id || res.post_id;
+      return { remoteId: id, remoteUrl: id ? `https://www.facebook.com/${id}` : null };
+    }
     if (post.imageUrl) {
       const res = await fetchJson(`${GRAPH}/${pageId}/photos`, {
         method: "POST",
@@ -128,6 +141,9 @@ export const facebookPublisher = {
 
 export const instagramPublisher = {
   async publish(post: PublishPost, account: SocialAccountRecord): Promise<PublishResult> {
+    if (post.mediaType === "video") {
+      throw new Error("Instagram video (Reels) publishing is not yet supported — use an image.");
+    }
     if (!post.imageUrl) {
       throw new Error("Instagram posts require an image.");
     }

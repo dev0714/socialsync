@@ -96,6 +96,9 @@ export const linkedinPublisher = {
   },
 
   async publish(post: PublishPost, account: SocialAccountRecord): Promise<PublishResult> {
+    if (post.mediaType === "video") {
+      throw new Error("LinkedIn video publishing is not yet supported — use an image.");
+    }
     const author = account.externalId!;
     let imageUrn: string | null = null;
 

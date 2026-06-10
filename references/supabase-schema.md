@@ -26,22 +26,28 @@ create unique index social_accounts_platform_external_idx on socialsync.social_a
 create table socialsync.social_posts (
   id uuid primary key default gen_random_uuid(),
   prompt text not null, caption text, image_path text, video_path text,
-  status text not null default 'draft' check (status in ('draft','publishing','published','failed')),
+  status text not null default 'draft' check (status in ('draft','scheduled','publishing','published','failed')),
+  scheduled_at timestamptz,            -- set when a post is queued for later
+  scheduled_account_ids uuid[],        -- which accounts the cron should publish to
   created_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 create index social_posts_created_at_idx on socialsync.social_posts (created_at desc);
+create index social_posts_scheduled_idx on socialsync.social_posts (scheduled_at) where status = 'scheduled';
 
 create table socialsync.social_post_targets (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references socialsync.social_posts(id) on delete cascade,
+  account_id uuid,                     -- the account that published this target (for polling/retry)
   platform text not null check (platform in ('instagram','facebook','tiktok','youtube','linkedin')),
-  status text not null default 'pending' check (status in ('pending','published','failed','skipped')),
+  -- 'processing' = the platform accepted the upload but is still finalizing it (TikTok/YouTube)
+  status text not null default 'pending' check (status in ('pending','processing','published','failed','skipped')),
   remote_id text, remote_url text, error text, posted_at timestamptz,
   created_at timestamptz not null default now()
 );
 create index social_post_targets_post_idx on socialsync.social_post_targets (post_id);
+create index social_post_targets_status_idx on socialsync.social_post_targets (status) where status = 'processing';
 
 -- Recommended: enable RLS with no policies (the app uses the service-role key, which bypasses RLS).
 alter table socialsync.social_accounts enable row level security;

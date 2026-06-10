@@ -100,12 +100,14 @@ export const youtubePublisher = {
   },
 
   async publish(post: PublishPost, account: SocialAccountRecord): Promise<PublishResult> {
-    if (!post.imageUrl) {
+    if (post.mediaType !== "video" && !post.imageUrl) {
       throw new Error("YouTube posts require media; no image was generated.");
     }
-    // Render the still image to a short MP4 (Shorts-friendly portrait).
-    const imageBytes = await post.imageBytes();
-    const video = await imageToVideo(imageBytes);
+    // Use an uploaded video directly; otherwise render the still image to a short MP4.
+    const video =
+      post.mediaType === "video"
+        ? await post.videoBytes()
+        : await imageToVideo(await post.imageBytes());
 
     const privacyStatus = process.env.YOUTUBE_PRIVACY || "private";
     const title = (post.caption.split("\n")[0] || "MeanKat Café").slice(0, 95);
@@ -146,6 +148,32 @@ export const youtubePublisher = {
       );
     }
     const id = json?.id;
-    return { remoteId: id ?? null, remoteUrl: id ? `https://youtube.com/watch?v=${id}` : null };
+    // The video is uploaded but YouTube still processes it asynchronously; the watch
+    // URL is live immediately, so report it now and let checkStatus confirm processing.
+    return {
+      remoteId: id ?? null,
+      remoteUrl: id ? `https://youtube.com/watch?v=${id}` : null,
+      status: id ? "processing" : "published",
+    };
+  },
+
+  async checkStatus(remoteId: string, account: SocialAccountRecord): Promise<PublishResult> {
+    const res = await fetchJson(
+      "https://www.googleapis.com/youtube/v3/videos?part=status,processingDetails&id=" + remoteId,
+      { headers: { Authorization: `Bearer ${account.accessToken}` } },
+    );
+    const item = res?.items?.[0];
+    const url = `https://youtube.com/watch?v=${remoteId}`;
+    const uploadStatus = item?.status?.uploadStatus; // "uploaded" | "processed" | "failed" | "rejected"
+    const processing = item?.processingDetails?.processingStatus; // "processing" | "succeeded" | "failed"
+
+    if (uploadStatus === "rejected" || uploadStatus === "failed" || processing === "failed") {
+      const reason = item?.status?.rejectionReason || item?.status?.failureReason || "processing failed";
+      throw new Error(`YouTube rejected the video: ${reason}`);
+    }
+    if (uploadStatus === "processed" || processing === "succeeded") {
+      return { remoteId, remoteUrl: url, status: "published" };
+    }
+    return { remoteId, remoteUrl: url, status: "processing" };
   },
 };

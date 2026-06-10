@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAuthed } from "@/lib/auth";
-import { getSupabaseAdminClient, getSupabaseBucketName } from "@/lib/supabase";
-import { PUBLISHERS, ensureFreshToken, loadAccountsByIds } from "@/lib/social";
-import type { PublishPost } from "@/lib/social/types";
+import { getSupabaseAdminClient } from "@/lib/supabase";
+import { publishPostToAccounts } from "@/lib/social/publish";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-const bodySchema = z.object({ accountIds: z.array(z.string().uuid()).min(1) });
+const bodySchema = z.object({
+  accountIds: z.array(z.string().uuid()).min(1),
+  // When set to a future time, the post is queued instead of published now.
+  scheduledAt: z.string().datetime().optional(),
+});
 
 export async function POST(request: Request, { params }: RouteContext) {
   if (!(await isAuthed())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,79 +24,31 @@ export async function POST(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Select at least one connected account." }, { status: 400 });
   }
 
-  const supabase = getSupabaseAdminClient();
-  const bucket = getSupabaseBucketName();
+  const { accountIds, scheduledAt } = parsed.data;
 
-  const { data: post, error: postError } = await supabase
-    .schema("socialsync")
-    .from("social_posts")
-    .select("id, caption, image_path")
-    .eq("id", postId)
-    .maybeSingle();
-
-  if (postError || !post) return NextResponse.json({ error: "Post not found." }, { status: 404 });
-
-  const imageUrl = post.image_path
-    ? supabase.storage.from(bucket).getPublicUrl(post.image_path).data.publicUrl
-    : null;
-
-  const publishPost: PublishPost = {
-    caption: post.caption ?? "",
-    imageUrl,
-    imageBytes: async () => {
-      if (!imageUrl) throw new Error("No image available for this post.");
-      const res = await fetch(imageUrl);
-      if (!res.ok) throw new Error("Failed to download generated image.");
-      return Buffer.from(await res.arrayBuffer());
-    },
-  };
-
-  const accounts = await loadAccountsByIds(parsed.data.accountIds);
-  if (accounts.length === 0) {
-    return NextResponse.json({ error: "No matching connected accounts." }, { status: 400 });
+  // Schedule for later: store the time + target accounts; the cron publishes when due.
+  if (scheduledAt && new Date(scheduledAt).getTime() > Date.now() + 30_000) {
+    const supabase = getSupabaseAdminClient();
+    const { error } = await supabase
+      .schema("socialsync")
+      .from("social_posts")
+      .update({
+        status: "scheduled",
+        scheduled_at: scheduledAt,
+        scheduled_account_ids: accountIds,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", postId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, scheduled: true, scheduledAt });
   }
 
-  await supabase
-    .schema("socialsync")
-    .from("social_posts")
-    .update({ status: "publishing", updated_at: new Date().toISOString() })
-    .eq("id", postId);
-
-  const targets: Array<{ platform: string; status: string; remoteUrl: string | null; error: string | null }> = [];
-  let anySuccess = false;
-
-  for (const account of accounts) {
-    const publisher = PUBLISHERS[account.platform];
-    try {
-      const fresh = await ensureFreshToken(account);
-      const result = await publisher.publish(publishPost, fresh);
-      anySuccess = true;
-      await supabase.schema("socialsync").from("social_post_targets").insert({
-        post_id: postId,
-        platform: account.platform,
-        status: "published",
-        remote_id: result.remoteId,
-        remote_url: result.remoteUrl,
-        posted_at: new Date().toISOString(),
-      });
-      targets.push({ platform: account.platform, status: "published", remoteUrl: result.remoteUrl, error: null });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Publish failed.";
-      await supabase.schema("socialsync").from("social_post_targets").insert({
-        post_id: postId,
-        platform: account.platform,
-        status: "failed",
-        error: message.slice(0, 500),
-      });
-      targets.push({ platform: account.platform, status: "failed", remoteUrl: null, error: message });
-    }
+  try {
+    const outcome = await publishPostToAccounts(postId, accountIds);
+    return NextResponse.json(outcome);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Publish failed.";
+    const status = message === "Post not found." ? 404 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
-
-  await supabase
-    .schema("socialsync")
-    .from("social_posts")
-    .update({ status: anySuccess ? "published" : "failed", updated_at: new Date().toISOString() })
-    .eq("id", postId);
-
-  return NextResponse.json({ ok: anySuccess, targets });
 }

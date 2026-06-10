@@ -39,12 +39,13 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
   const { data: existing } = await supabase
     .schema("socialsync")
     .from("social_posts")
-    .select("image_path")
+    .select("image_path, video_path")
     .eq("id", postId)
     .maybeSingle();
 
-  if (existing?.image_path) {
-    await supabase.storage.from(bucket).remove([existing.image_path]);
+  const paths = [existing?.image_path, existing?.video_path].filter((p): p is string => Boolean(p));
+  if (paths.length > 0) {
+    await supabase.storage.from(bucket).remove(paths);
   }
 
   const { error } = await supabase.schema("socialsync").from("social_posts").delete().eq("id", postId);

@@ -12,7 +12,7 @@ export async function GET() {
   const { data, error } = await supabase
     .schema("socialsync")
     .from("social_posts")
-    .select("id, prompt, caption, image_path, status, created_at")
+    .select("id, prompt, caption, image_path, video_path, status, scheduled_at, created_at")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -42,9 +42,13 @@ export async function GET() {
     prompt: post.prompt,
     caption: post.caption,
     status: post.status,
+    scheduledAt: post.scheduled_at ?? null,
     createdAt: post.created_at,
     imageUrl: post.image_path
       ? supabase.storage.from(bucket).getPublicUrl(post.image_path).data.publicUrl
+      : null,
+    videoUrl: post.video_path
+      ? supabase.storage.from(bucket).getPublicUrl(post.video_path).data.publicUrl
       : null,
     targets: targetsByPost[post.id] ?? [],
   }));
