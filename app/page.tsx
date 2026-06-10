@@ -233,14 +233,14 @@ function Studio({ onLogout }: { onLogout: () => void }) {
           <textarea className="textarea" rows={5} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. Weekend special: buy-one-get-one on all lattes, photo of a cozy coffee setup." style={{ resize: "vertical" }} />
           <div className="tag" style={{ margin: "14px 0 6px" }}>Tone (optional)</div>
           <input className="input" value={tone} onChange={(e) => setTone(e.target.value)} placeholder="warm and playful, urgent, professional…" />
-          <button className="btn btn-primary" style={{ marginTop: 16 }} type="submit" disabled={generating || uploading || !prompt.trim()}>{generating ? "Generating…" : "✨ Generate post"}</button>
+          <button className="btn btn-primary" style={{ width: "100%", marginTop: 20 }} type="submit" disabled={generating || uploading || !prompt.trim()}>{generating ? "Generating…" : "✨ Generate post"}</button>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0 6px", color: "var(--text-dim)", fontSize: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "28px 0 20px", color: "var(--text-dim)", fontSize: 12 }}>
             <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             or upload your own
             <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
           </div>
-          <label className="btn btn-ghost" style={{ cursor: uploading ? "default" : "pointer" }}>
+          <label className="btn btn-ghost" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: uploading ? "default" : "pointer" }}>
             {uploading ? "Uploading…" : "📎 Upload photo or video"}
             <input
               type="file"
@@ -251,7 +251,7 @@ function Studio({ onLogout }: { onLogout: () => void }) {
             />
           </label>
 
-          {msg && <div style={{ marginTop: 14, fontSize: 13, color: msg.startsWith("✅") || msg.startsWith("🗓️") ? "var(--accent-2)" : "var(--danger)" }}>{msg}</div>}
+          {msg && <div style={{ marginTop: 18, fontSize: 13, color: msg.startsWith("✅") || msg.startsWith("🗓️") ? "var(--accent-2)" : "var(--danger)" }}>{msg}</div>}
         </form>
 
         {/* Preview */}
